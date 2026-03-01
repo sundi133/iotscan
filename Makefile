@@ -32,7 +32,7 @@ test-docker:
 
 e2e:
 	docker compose build iotscan
-	docker compose run --rm iotscan bash /app/scripts/e2e_test.sh mqtt-broker web-target iot-device
+	docker compose run --rm --entrypoint bash iotscan /app/scripts/e2e_test.sh mqtt-broker web-target iot-device
 
 # ── Scan Examples ────────────────────────────────────────
 scan-mqtt:
