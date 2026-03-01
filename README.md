@@ -546,10 +546,106 @@ iotscan scan 192.168.1.100 -c my_scan.yaml -o report.html --format html
 - Prioritized remediations with effort estimates
 - Supports Anthropic Claude, OpenAI, and offline rule-based analysis
 
+## Docker Setup (Recommended for Testing)
+
+Run the entire toolkit in Docker with vulnerable test targets (MQTT broker, web server) for safe, isolated testing.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+
+### Quick Start with Docker
+
+```bash
+# Build the iotscan image
+make build
+
+# Start vulnerable test targets (MQTT broker + web server)
+make up
+
+# Run unit tests inside Docker
+make test-docker
+
+# Run full end-to-end tests against test targets
+make e2e
+
+# Scan the insecure MQTT broker
+make scan-mqtt
+
+# Scan the vulnerable web interface
+make scan-web
+
+# Stop everything
+make down
+```
+
+### Manual Docker Commands
+
+```bash
+# Build the image
+docker compose build
+
+# Run a scan against the MQTT test broker
+docker compose run --rm iotscan scan mqtt-broker -p 1883 --protocol mqtt -m protocols
+
+# Run a scan against the vulnerable web target
+docker compose run --rm iotscan scan web-target -p 80 -m web
+
+# Run firmware analysis inside Docker
+docker compose run --rm iotscan scan 127.0.0.1 --firmware /app/samples/firmware.bin -m firmware
+
+# Run the AI agent scan against test targets
+docker compose run --rm iotscan agent-scan mqtt-broker -p 1883 --device-type mqtt_broker
+
+# Generate an HTML report
+docker compose run --rm iotscan scan mqtt-broker -p 1883 -m protocols -m credentials -o /app/reports/mqtt_scan.html --format html
+
+# Run pytest
+docker compose run --rm test-runner
+```
+
+### Test Targets
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `mqtt-broker` | 1883 | Eclipse Mosquitto with anonymous access enabled (no auth, no TLS) |
+| `web-target` | 80 (8088 on host) | Simulated IoT admin panel with exposed `/config.json`, `/debug`, wildcard CORS, dangerous HTTP methods |
+
+### Docker Compose Services
+
+```bash
+docker compose up -d          # start test targets in background
+docker compose ps              # check running services
+docker compose logs mqtt-broker  # view MQTT broker logs
+docker compose down -v         # stop and clean up
+```
+
 ## Running Tests
 
 ```bash
-pytest              # run all 59 tests
+# Local
+pytest              # run all tests
 pytest -v           # verbose output
 pytest --cov        # with coverage report
+
+# Docker
+make test-docker    # unit tests in Docker
+make e2e            # full end-to-end tests with test targets
+```
+
+## Makefile Reference
+
+```
+make install      Install iotscan locally
+make dev          Install with dev dependencies
+make test         Run pytest locally
+make lint         Run ruff linter
+make build        Build Docker image
+make up           Start test targets (MQTT + web)
+make down         Stop all containers
+make test-docker  Run unit tests in Docker
+make e2e          Run end-to-end tests in Docker
+make scan-mqtt    Scan the test MQTT broker
+make scan-web     Scan the test web server
+make clean        Remove reports and cache files
 ```
