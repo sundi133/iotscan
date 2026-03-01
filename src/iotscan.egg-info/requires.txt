@@ -1,0 +1,17 @@
+click>=8.1
+rich>=13.0
+paho-mqtt>=1.6
+aiocoap>=0.4
+bleak>=0.21
+scapy>=2.5
+pyyaml>=6.0
+jinja2>=3.1
+cryptography>=41.0
+requests>=2.31
+aiohttp>=3.9
+
+[dev]
+pytest>=7.4
+pytest-asyncio>=0.21
+pytest-cov>=4.1
+ruff>=0.1

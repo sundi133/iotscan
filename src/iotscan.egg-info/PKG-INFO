@@ -1,3 +1,28 @@
+Metadata-Version: 2.4
+Name: iotscan
+Version: 0.1.0
+Summary: IoT Security Pentesting Toolkit - Firmware analysis, protocol testing, credential checks, OTA analysis, and attack path mapping
+Author: iotscan contributors
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: click>=8.1
+Requires-Dist: rich>=13.0
+Requires-Dist: paho-mqtt>=1.6
+Requires-Dist: aiocoap>=0.4
+Requires-Dist: bleak>=0.21
+Requires-Dist: scapy>=2.5
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: jinja2>=3.1
+Requires-Dist: cryptography>=41.0
+Requires-Dist: requests>=2.31
+Requires-Dist: aiohttp>=3.9
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21; extra == "dev"
+Requires-Dist: pytest-cov>=4.1; extra == "dev"
+Requires-Dist: ruff>=0.1; extra == "dev"
+
 # iotscan
 
 IoT Security Pentesting Toolkit — firmware analysis, protocol testing, credential checks, OTA update analysis, and device-to-cloud attack path mapping.

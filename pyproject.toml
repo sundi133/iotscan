@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iotscan"
+version = "0.1.0"
+description = "IoT Security Pentesting Toolkit - Firmware analysis, protocol testing, credential checks, OTA analysis, and attack path mapping"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "iotscan contributors"},
+]
+dependencies = [
+    "click>=8.1",
+    "rich>=13.0",
+    "paho-mqtt>=1.6",
+    "aiocoap>=0.4",
+    "bleak>=0.21",
+    "scapy>=2.5",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "cryptography>=41.0",
+    "requests>=2.31",
+    "aiohttp>=3.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.1",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+iotscan = "iotscan.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
