@@ -548,36 +548,137 @@ iotscan scan 192.168.1.100 -c my_scan.yaml -o report.html --format html
 
 ## Docker Setup (Recommended for Testing)
 
-Run the entire toolkit in Docker with vulnerable test targets (MQTT broker, web server) for safe, isolated testing.
+Run the entire toolkit in Docker with vulnerable test targets (MQTT broker, web server, simulated IoT smart camera) for safe, isolated testing.
 
 ### Prerequisites
 
 - Docker and Docker Compose installed
 
-### Quick Start with Docker
+### Step-by-Step Testing Guide
+
+Follow these steps to build, launch, and scan the simulated IoT device end-to-end:
+
+**Step 1: Build all Docker images**
 
 ```bash
-# Build the iotscan image
 make build
-
-# Start vulnerable test targets (MQTT broker + web server)
-make up
-
-# Run unit tests inside Docker
-make test-docker
-
-# Run full end-to-end tests against test targets
-make e2e
-
-# Scan the insecure MQTT broker
-make scan-mqtt
-
-# Scan the vulnerable web interface
-make scan-web
-
-# Stop everything
-make down
 ```
+
+This builds the `iotscan` scanner image and the `iot-device` simulator image.
+
+**Step 2: Start the test targets**
+
+```bash
+make up
+```
+
+This launches three vulnerable targets in the background:
+
+| Service | Host Port | Container Port | Description |
+|---------|-----------|----------------|-------------|
+| `mqtt-broker` | 1883 | 1883 | Mosquitto MQTT broker (anonymous access, no TLS) |
+| `web-target` | 8088 | 80 | Simple vulnerable web panel |
+| `iot-device` | 8080 (HTTP), 2323 (Telnet), 2121 (FTP), 5683/udp (CoAP), 1161/udp (SNMP) | 80, 23, 21, 5683, 161 | Simulated SmartCam Pro X200 with 6 vulnerable services |
+
+**Step 3: Verify the targets are running**
+
+```bash
+docker compose ps
+
+# Test IoT device HTTP
+curl -s http://localhost:8080/ | head
+
+# Test IoT device config leak
+curl -s http://localhost:8080/config.json | python3 -m json.tool
+
+# Test Telnet banner
+echo "" | nc -w2 localhost 2323
+
+# Test FTP banner
+echo "QUIT" | nc -w2 localhost 2121
+```
+
+**Step 4: Run a quick scan against the IoT device**
+
+```bash
+make scan-device
+```
+
+This runs network discovery, web security, and credential checks against the simulated camera.
+
+**Step 5: Run a full scan with all modules**
+
+```bash
+make scan-device-full
+```
+
+Produces a JSON report at `reports/device_scan.json` with findings from network, web, credentials, and protocol modules.
+
+**Step 6: Run an AI-powered agent scan**
+
+```bash
+make scan-device-agent
+```
+
+Produces an HTML report at `reports/device_agent.html` with executive summary, attack chains, and prioritized remediations.
+
+**Step 7: Run a config-driven scan with the sample config**
+
+```bash
+docker compose run --rm iotscan scan iot-device \
+  -c /app/samples/iot_device_scan.yaml \
+  -o /app/reports/full_config_scan.html --format html
+```
+
+The sample config (`samples/iot_device_scan.yaml`) enables all 6 modules including OTA analysis and attack path mapping.
+
+**Step 8: Scan the MQTT broker**
+
+```bash
+make scan-mqtt
+```
+
+**Step 9: Scan the web target**
+
+```bash
+make scan-web
+```
+
+**Step 10: Run the full end-to-end test suite**
+
+```bash
+make e2e
+```
+
+This runs automated validation of all scanner modules against all three test targets.
+
+**Step 11: Run unit tests**
+
+```bash
+make test-docker
+```
+
+**Step 12: Stop everything and clean up**
+
+```bash
+make down
+make clean
+```
+
+### Simulated IoT Device (SmartCam Pro X200)
+
+The `iot-device` container simulates a deliberately vulnerable IoT smart camera with multiple exposed services:
+
+| Service | Port | Vulnerabilities |
+|---------|------|-----------------|
+| **HTTP** | 80 | Missing security headers, exposed `/config.json` (WiFi creds, API keys), `/.env` (AWS keys, DB passwords), `/debug`, `/firmware.bin` download, `/syslog`, GoAhead web server, `/goform/` endpoints, `/HNAP1/`, wildcard CORS, dangerous HTTP methods (PUT/DELETE/TRACE), unauthenticated admin panel |
+| **Telnet** | 23 | Default credentials (`admin/admin`, `root/root`), BusyBox banner disclosure |
+| **FTP** | 21 | Anonymous access, vsftpd 2.3.4 banner disclosure |
+| **CoAP** | 5683/udp | Unauthenticated resource discovery (`/device`, `/temperature`, `/firmware`, `/config`) |
+| **SNMP** | 161/udp | Accepts default community strings (`public`, `private`, `community`, `admin`, `default`) |
+| **MQTT** | (client) | Publishes telemetry and config data (including API keys) to the MQTT broker without authentication |
+
+The downloadable firmware binary (`/firmware.bin`) contains intentional security issues: SquashFS/ELF headers, hardcoded passwords, API keys, unsafe C functions (strcpy, gets, sprintf), vulnerable BusyBox/OpenSSL/Dropbear versions, weak crypto (DES, MD5, RC4), and debug artifacts (JTAG, UART, telnetd, build paths).
 
 ### Manual Docker Commands
 
@@ -585,20 +686,26 @@ make down
 # Build the image
 docker compose build
 
+# Run a scan against the IoT device
+docker compose run --rm iotscan scan iot-device -m network -m web -m credentials
+
 # Run a scan against the MQTT test broker
 docker compose run --rm iotscan scan mqtt-broker -p 1883 --protocol mqtt -m protocols
 
 # Run a scan against the vulnerable web target
 docker compose run --rm iotscan scan web-target -p 80 -m web
 
-# Run firmware analysis inside Docker
-docker compose run --rm iotscan scan 127.0.0.1 --firmware /app/samples/firmware.bin -m firmware
+# Download and scan the IoT device firmware
+docker compose run --rm iotscan bash -c \
+  "python3 -c \"import urllib.request; open('/tmp/fw.bin','wb').write(urllib.request.urlopen('http://iot-device/firmware.bin').read())\" && \
+   iotscan scan iot-device --firmware /tmp/fw.bin -m firmware -m web -m credentials -o /app/reports/fw_scan.html --format html"
 
-# Run the AI agent scan against test targets
-docker compose run --rm iotscan agent-scan mqtt-broker -p 1883 --device-type mqtt_broker
+# Run the AI agent scan against the IoT device
+docker compose run --rm iotscan agent-scan iot-device --device-type smart_camera
 
 # Generate an HTML report
-docker compose run --rm iotscan scan mqtt-broker -p 1883 -m protocols -m credentials -o /app/reports/mqtt_scan.html --format html
+docker compose run --rm iotscan scan iot-device -m network -m web -m credentials \
+  -o /app/reports/device_report.html --format html
 
 # Run pytest
 docker compose run --rm test-runner
@@ -610,12 +717,14 @@ docker compose run --rm test-runner
 |---------|------|-------------|
 | `mqtt-broker` | 1883 | Eclipse Mosquitto with anonymous access enabled (no auth, no TLS) |
 | `web-target` | 80 (8088 on host) | Simulated IoT admin panel with exposed `/config.json`, `/debug`, wildcard CORS, dangerous HTTP methods |
+| `iot-device` | 80 (8080 on host) | Multi-service IoT smart camera: HTTP admin, Telnet, FTP, CoAP, SNMP, MQTT telemetry |
 
 ### Docker Compose Services
 
 ```bash
 docker compose up -d          # start test targets in background
 docker compose ps              # check running services
+docker compose logs iot-device # view IoT device logs
 docker compose logs mqtt-broker  # view MQTT broker logs
 docker compose down -v         # stop and clean up
 ```
@@ -636,16 +745,19 @@ make e2e            # full end-to-end tests with test targets
 ## Makefile Reference
 
 ```
-make install      Install iotscan locally
-make dev          Install with dev dependencies
-make test         Run pytest locally
-make lint         Run ruff linter
-make build        Build Docker image
-make up           Start test targets (MQTT + web)
-make down         Stop all containers
-make test-docker  Run unit tests in Docker
-make e2e          Run end-to-end tests in Docker
-make scan-mqtt    Scan the test MQTT broker
-make scan-web     Scan the test web server
-make clean        Remove reports and cache files
+make install           Install iotscan locally
+make dev               Install with dev dependencies
+make test              Run pytest locally
+make lint              Run ruff linter
+make build             Build Docker images
+make up                Start test targets (MQTT + web + IoT device)
+make down              Stop all containers
+make test-docker       Run unit tests in Docker
+make e2e               Run end-to-end tests in Docker
+make scan-mqtt         Scan the test MQTT broker
+make scan-web          Scan the test web server
+make scan-device       Quick scan the IoT device (network + web + creds)
+make scan-device-full  Full scan the IoT device with JSON report
+make scan-device-agent AI agent scan the IoT device with HTML report
+make clean             Remove reports and cache files
 ```

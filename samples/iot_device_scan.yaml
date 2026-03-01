@@ -1,0 +1,48 @@
+# Sample config for scanning the simulated IoT smart camera
+# Usage: docker compose run --rm iotscan scan iot-device -c /app/samples/iot_device_scan.yaml
+target:
+  host: iot-device
+  port: 80
+  protocol: auto
+  device_type: smart_camera
+
+modules:
+  - network
+  - web
+  - credentials
+  - protocols
+  - ota
+  - attack_paths
+
+config:
+  mqtt_tls_port: 8883
+  coap_dtls_port: 5684
+
+  ota:
+    update_url: http://firmware.iotcorp.example.com/updates/latest.bin
+    signing_method: none
+    rollback_protection: false
+    secure_boot: false
+    certificate_pinning: false
+    allow_custom_server: true
+
+  ecosystem:
+    gateway:
+      host: mqtt-broker
+    cloud_endpoints:
+      - url: http://api.iotcorp.example.com/v1/devices
+    apis:
+      - url: http://api.iotcorp.example.com/v1/telemetry
+        auth_method: none
+        rate_limiting: false
+        input_validation: false
+    mobile_app: true
+    firmware_accessible: true
+    network:
+      iot_vlan: false
+      egress_filtering: false
+      ids_monitoring: false
+    cloud:
+      encryption_at_rest: false
+      device_identity: false
+      shared_credentials: true

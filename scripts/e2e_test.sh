@@ -10,6 +10,7 @@ set -euo pipefail
 
 MQTT_HOST="${1:-127.0.0.1}"
 WEB_HOST="${2:-127.0.0.1}"
+IOT_HOST="${3:-127.0.0.1}"
 REPORT_DIR="${REPORT_DIR:-./reports}"
 PASS=0
 FAIL=0
@@ -162,8 +163,44 @@ check "Protocol config finds Zigbee+BLE issues" bash -c \
     "iotscan -q scan 127.0.0.1 -c /tmp/iotscan_proto_test.yaml -o $REPORT_DIR/proto_report.json --format json 2>&1; \
      python3 -c \"import json; r=json.load(open('$REPORT_DIR/proto_report.json')); assert r['total_findings'] >= 3\""
 
-# ── 8. Exit Codes ────────────────────────────────────────
-header "8. Exit Codes"
+# ── 8. IoT Device Simulation Scans ──────────────────────
+header "8. IoT Device Simulation"
+
+# Wait for IoT device to be ready
+echo "  Waiting for IoT device at $IOT_HOST:80..."
+for i in $(seq 1 10); do
+    if python3 -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('$IOT_HOST', 80)); s.close()" 2>/dev/null; then
+        break
+    fi
+    sleep 2
+done
+
+check "IoT device HTTP reachable" python3 -c "
+import urllib.request
+r = urllib.request.urlopen('http://$IOT_HOST:80/', timeout=5)
+assert r.status == 200
+"
+
+check "Network scan finds open ports on IoT device" bash -c \
+    "iotscan -q scan $IOT_HOST -m network -o $REPORT_DIR/device_network.json --format json 2>&1; \
+     python3 -c \"import json; r=json.load(open('$REPORT_DIR/device_network.json')); assert r['total_findings'] >= 1, f'Got {r[\\\"total_findings\\\"]}'\""
+
+check "Web scan finds missing headers on IoT device" bash -c \
+    "iotscan -q scan $IOT_HOST -p 80 -m web -o $REPORT_DIR/device_web.json --format json 2>&1; \
+     python3 -c \"import json; r=json.load(open('$REPORT_DIR/device_web.json')); assert r['total_findings'] >= 2, f'Got {r[\\\"total_findings\\\"]}'\""
+
+check "Credential scan finds defaults on IoT device" bash -c \
+    "iotscan -q scan $IOT_HOST -p 80 -m credentials -o $REPORT_DIR/device_creds.json --format json 2>&1; \
+     python3 -c \"import json; r=json.load(open('$REPORT_DIR/device_web.json')); assert r['total_findings'] >= 1\""
+
+check "IoT device firmware download works" bash -c \
+    "python3 -c \"import urllib.request; data=urllib.request.urlopen('http://$IOT_HOST:80/firmware.bin', timeout=5).read(); assert len(data) > 100\""
+
+check "Full device scan produces HTML report" bash -c \
+    "iotscan -q scan $IOT_HOST -p 80 -m web -m credentials -m network -o $REPORT_DIR/device_full.html --format html 2>&1; test -s $REPORT_DIR/device_full.html"
+
+# ── 9. Exit Codes ────────────────────────────────────────
+header "9. Exit Codes"
 
 set +e
 iotscan -q scan 127.0.0.1 --firmware $REPORT_DIR/test_firmware.bin -m firmware > /dev/null 2>&1
