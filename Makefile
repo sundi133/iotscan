@@ -18,8 +18,11 @@ build:
 	docker compose build
 
 up:
-	docker compose up -d mqtt-broker web-target
-	@echo "Test targets running. MQTT: localhost:1883, Web: localhost:8088"
+	docker compose up -d mqtt-broker web-target iot-device
+	@echo "Test targets running:"
+	@echo "  MQTT broker:  localhost:1883"
+	@echo "  Web target:   localhost:8088"
+	@echo "  IoT device:   localhost:8080 (HTTP), :2323 (Telnet), :2121 (FTP), :5683 (CoAP), :1161 (SNMP)"
 
 down:
 	docker compose down -v
@@ -29,7 +32,7 @@ test-docker:
 
 e2e:
 	docker compose build iotscan
-	docker compose run --rm iotscan bash /app/scripts/e2e_test.sh mqtt-broker web-target
+	docker compose run --rm iotscan bash /app/scripts/e2e_test.sh mqtt-broker web-target iot-device
 
 # ── Scan Examples ────────────────────────────────────────
 scan-mqtt:
@@ -37,6 +40,15 @@ scan-mqtt:
 
 scan-web:
 	docker compose run --rm iotscan scan web-target -p 80 -m web -m credentials
+
+scan-device:
+	docker compose run --rm iotscan scan iot-device -m network -m web -m credentials
+
+scan-device-full:
+	docker compose run --rm iotscan scan iot-device -m network -m web -m credentials -m protocols -o /app/reports/device_scan.json --format json
+
+scan-device-agent:
+	docker compose run --rm iotscan agent-scan iot-device --device-type smart_camera -o /app/reports/device_agent.html --format html
 
 scan-all:
 	docker compose run --rm iotscan scan mqtt-broker -p 1883 -o /app/reports/full_scan.json --format json

@@ -8,6 +8,7 @@ services:
     depends_on:
       - mqtt-broker
       - web-target
+      - iot-device
     networks:
       - iotnet
     volumes:
@@ -67,6 +68,26 @@ services:
       "
     ports:
       - "8088:80"
+    networks:
+      - iotnet
+
+  # ── Test target: Simulated IoT smart camera ─────────────
+  # Multi-service vulnerable device with HTTP, Telnet, FTP,
+  # CoAP, SNMP, and MQTT telemetry publishing.
+  iot-device:
+    build:
+      context: ./docker/iot-device
+    depends_on:
+      - mqtt-broker
+    environment:
+      - MQTT_BROKER=mqtt-broker
+      - MQTT_PORT=1883
+    ports:
+      - "8080:80"       # HTTP admin panel
+      - "2323:23"       # Telnet
+      - "2121:21"       # FTP
+      - "5683:5683/udp" # CoAP
+      - "1161:161/udp"  # SNMP
     networks:
       - iotnet
 
