@@ -1,0 +1,83 @@
+# Docker Compose setup with vulnerable IoT test targets
+# Usage: docker compose up -d && docker compose run iotscan agent-scan mqtt-broker
+
+services:
+  # ── iotscan scanner ──────────────────────────────────────
+  iotscan:
+    build: .
+    depends_on:
+      - mqtt-broker
+      - web-target
+    networks:
+      - iotnet
+    volumes:
+      - ./reports:/app/reports
+      - ./samples:/app/samples
+    entrypoint: ["iotscan"]
+
+  # ── Test target: MQTT broker (no auth) ───────────────────
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    networks:
+      - iotnet
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  # ── Test target: Vulnerable web interface ────────────────
+  web-target:
+    image: python:3.12-slim
+    command: >
+      python -c "
+      from http.server import HTTPServer, SimpleHTTPRequestHandler
+      import os, json
+
+      class IoTHandler(SimpleHTTPRequestHandler):
+          def do_GET(self):
+              if self.path == '/':
+                  self.send_response(200)
+                  self.send_header('Content-Type', 'text/html')
+                  self.send_header('Server', 'GoAhead-Webs/2.5.0')
+                  self.end_headers()
+                  self.wfile.write(b'<html><body><h1>IoT Device Admin</h1></body></html>')
+              elif self.path == '/config.json':
+                  self.send_response(200)
+                  self.send_header('Content-Type', 'application/json')
+                  self.end_headers()
+                  self.wfile.write(json.dumps({'wifi_ssid':'MyNetwork','wifi_pass':'password123','api_key':'sk-test-1234'}).encode())
+              elif self.path == '/debug':
+                  self.send_response(200)
+                  self.end_headers()
+                  self.wfile.write(b'Debug info: firmware v1.2.3, uptime 42d')
+              else:
+                  self.send_response(404)
+                  self.end_headers()
+
+          def do_OPTIONS(self):
+              self.send_response(200)
+              self.send_header('Allow', 'GET, POST, PUT, DELETE, OPTIONS, TRACE')
+              self.send_header('Access-Control-Allow-Origin', '*')
+              self.end_headers()
+
+          def log_message(self, format, *args):
+              pass
+
+      HTTPServer(('0.0.0.0', 80), IoTHandler).serve_forever()
+      "
+    ports:
+      - "8088:80"
+    networks:
+      - iotnet
+
+  # ── Run unit tests ───────────────────────────────────────
+  test-runner:
+    build: .
+    entrypoint: ["pytest"]
+    command: ["-v", "--tb=short"]
+    networks:
+      - iotnet
+
+networks:
+  iotnet:
+    driver: bridge
