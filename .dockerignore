@@ -8,9 +8,9 @@ __pycache__
 dist/
 build/
 reports/
-samples/
 docker/
 *.md
+!README.md
 Makefile
 docker-compose.yml
 .dockerignore
