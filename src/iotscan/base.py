@@ -53,6 +53,8 @@ class BaseScanner(abc.ABC):
         evidence: str = "",
         remediation: str = "",
         cve: str = "",
+        owasp_iot: str = "",
+        cvss_score: float = 0.0,
     ) -> None:
         finding = Finding(
             title=title,
@@ -62,6 +64,8 @@ class BaseScanner(abc.ABC):
             evidence=evidence,
             remediation=remediation,
             cve=cve,
+            owasp_iot=owasp_iot,
+            cvss_score=cvss_score,
         )
         self.result.add_finding(finding)
         self.logger.info("Finding: [%s] %s", severity.value, title)

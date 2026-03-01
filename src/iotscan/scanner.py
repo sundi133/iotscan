@@ -15,8 +15,10 @@ from .modules import (
     AttackPathMapper,
     CredentialChecker,
     FirmwareAnalyzer,
+    NetworkDiscovery,
     OTAAnalyzer,
     ProtocolTester,
+    WebSecurityTester,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,8 @@ ALL_MODULES: dict[str, type[BaseScanner]] = {
     "credentials": CredentialChecker,
     "ota": OTAAnalyzer,
     "attack_paths": AttackPathMapper,
+    "network": NetworkDiscovery,
+    "web": WebSecurityTester,
 }
 
 

@@ -115,5 +115,44 @@ def test_firmware_vulnerable_library():
             f for f in result.findings if "busybox" in f.title.lower()
         ]
         assert len(vuln_findings) > 0
+        assert vuln_findings[0].owasp_iot == "I5"
+
+    Path(f.name).unlink(missing_ok=True)
+
+
+def test_firmware_owasp_on_secrets():
+    with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as f:
+        f.write(b'password = "admin123"\n')
+        f.flush()
+
+        target = Target(host="192.168.1.1", firmware_path=f.name)
+        scanner = FirmwareAnalyzer(target=target)
+        result = scanner.run()
+
+        secret_findings = [
+            finding for finding in result.findings if "password" in finding.title.lower()
+        ]
+        assert len(secret_findings) > 0
+        assert secret_findings[0].owasp_iot == "I1"
+        assert secret_findings[0].cvss_score > 0
+
+    Path(f.name).unlink(missing_ok=True)
+
+
+def test_firmware_weak_crypto():
+    with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as f:
+        f.write(b"\x00" * 50)
+        f.write(b"DES_ecb_encrypt\x00rand()\x00ECB_MODE\x00")
+        f.write(b"\x00" * 50)
+        f.flush()
+
+        target = Target(host="192.168.1.1", firmware_path=f.name)
+        scanner = FirmwareAnalyzer(target=target)
+        result = scanner.run()
+
+        crypto_findings = [
+            f for f in result.findings if "weak cryptography" in f.title.lower()
+        ]
+        assert len(crypto_findings) >= 2
 
     Path(f.name).unlink(missing_ok=True)

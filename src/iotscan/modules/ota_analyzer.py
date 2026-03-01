@@ -49,6 +49,8 @@ class OTAAnalyzer(BaseScanner):
                     ),
                     evidence=f"Update URL: {update_url}",
                     remediation="Use HTTPS with certificate pinning for firmware downloads.",
+                    owasp_iot="I4",
+                    cvss_score=9.8,
                 )
             elif parsed.scheme == "https":
                 self._verify_tls_config(parsed.hostname, parsed.port or 443)
@@ -133,6 +135,8 @@ class OTAAnalyzer(BaseScanner):
                     "Implement firmware signing using Ed25519 or RSA-2048+ signatures. "
                     "Verify signatures in a secure bootloader before installation."
                 ),
+                owasp_iot="I4",
+                cvss_score=9.8,
             )
         else:
             if signing_method.lower() in ("md5", "crc32", "sha1"):

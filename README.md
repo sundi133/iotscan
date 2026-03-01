@@ -1,16 +1,18 @@
 # iotscan
 
-IoT Security Pentesting Toolkit — firmware analysis, protocol testing, credential checks, OTA update analysis, and device-to-cloud attack path mapping.
+AI-native IoT Security Pentesting Toolkit — firmware analysis, protocol testing, credential checks, OTA update analysis, device-to-cloud attack path mapping, network discovery, web security testing, and LLM-powered agentic scanning.
 
 ## Modules
 
 | Module | Description |
 |--------|-------------|
-| **firmware** | Binary header identification, hardcoded credential detection, unsafe C function scanning, vulnerable library detection, entropy analysis, debug artifact discovery |
+| **firmware** | Binary header identification, hardcoded credential detection, unsafe C function scanning, vulnerable library detection, ELF hardening checks (NX/PIE/RELRO/canaries), weak cryptography detection, entropy analysis, debug artifact discovery |
 | **protocols** | MQTT (anonymous access, TLS, wildcard topics, version), CoAP (resource discovery, DTLS), Zigbee (network key, security mode, permit join, touchlink), BLE (pairing, encryption, GATT, advertising) |
 | **credentials** | Default credential testing across HTTP, SSH, Telnet, FTP, and MQTT for 40+ IoT vendor defaults |
 | **ota** | Update transport security, firmware signing verification, rollback protection, secure boot, certificate pinning, delta update validation |
 | **attack_paths** | Device-to-cloud path identification, network segmentation checks, API security, cloud backend assessment, lateral movement analysis |
+| **network** | UPnP/SSDP discovery, mDNS enumeration, SNMP default community string testing, service fingerprinting, banner grabbing, Modbus/BACnet/RTSP exposure detection |
+| **web** | Security header checks, sensitive endpoint discovery, path traversal testing, command injection detection, CORS misconfiguration, HTTP method checks, TLS validation |
 
 ## Installation
 
@@ -33,7 +35,10 @@ pip install -e .
 # 2. Run your first scan
 iotscan scan 192.168.1.100
 
-# 3. See what modules are available
+# 3. AI-powered agentic scan (adapts strategy based on findings)
+iotscan agent-scan 192.168.1.100 --device-type smart_camera
+
+# 4. See what modules are available
 iotscan list-modules
 ```
 
@@ -48,6 +53,8 @@ Options:
 
 Commands:
   scan             Run IoT security scan against a target
+  agent-scan       AI-powered adaptive scan (multi-phase, auto-adjusting)
+  analyze          Run AI analysis on a previously saved JSON report
   list-modules     List available scanning modules
   init-config      Generate a sample YAML configuration file
 ```
@@ -70,11 +77,44 @@ Options:
 
 **Exit codes:** `0` = clean, `1` = high-severity findings, `2` = critical findings.
 
+### `iotscan agent-scan` (AI-Native)
+
+```
+iotscan agent-scan [OPTIONS] HOST
+
+Options:
+  -p, --port INTEGER                 Target port
+  --firmware PATH                    Path to firmware binary file
+  --device-type TEXT                 Device type for contextual AI analysis
+  -c, --config PATH                  YAML config file
+  -o, --output PATH                  Output report file path
+  --format [text|json|html]          Report format (default: text)
+  --ai-provider [anthropic|openai|offline]   LLM provider (default: offline)
+  --ai-model TEXT                    AI model override
+```
+
+The agent scan runs in 4 phases:
+1. **Discovery** - network service scan + credential check
+2. **AI Analysis** - reasons about initial findings, recommends next modules
+3. **Deep Scan** - runs AI-recommended modules with targeted config
+4. **AI Report** - generates executive summary, attack chains, OWASP mapping, prioritized remediations
+
+### `iotscan analyze`
+
+```
+iotscan analyze [OPTIONS] REPORT_FILE
+
+Options:
+  --ai-provider [anthropic|openai|offline]   LLM provider
+  --ai-model TEXT                            AI model override
+  --finding INTEGER                          Deep dive into a specific finding by number
+```
+
 ## Usage Examples
 
 ### 1. Run all modules against a device
 
-Scans the target with all 5 modules (firmware, protocols, credentials, ota, attack_paths):
+Scans the target with all 7 modules:
 
 ```bash
 iotscan scan 192.168.1.100
@@ -306,6 +346,64 @@ iotscan -v scan 192.168.1.100
 iotscan -q scan 192.168.1.100 -o report.json --format json
 ```
 
+### 13. AI-powered agent scan (recommended)
+
+The `agent-scan` command runs an intelligent multi-phase scan that adapts based on findings:
+
+```bash
+# Offline mode (no API key needed - uses rule-based AI)
+iotscan agent-scan 192.168.1.100 --device-type smart_camera
+
+# With firmware analysis
+iotscan agent-scan 192.168.1.100 --firmware ./fw.bin --device-type ip_camera
+
+# With Claude AI (requires ANTHROPIC_API_KEY)
+ANTHROPIC_API_KEY=sk-... iotscan agent-scan 192.168.1.100 --ai-provider anthropic
+
+# With OpenAI (requires OPENAI_API_KEY)
+OPENAI_API_KEY=sk-... iotscan agent-scan 192.168.1.100 --ai-provider openai
+
+# Save full AI-enriched report
+iotscan agent-scan 192.168.1.100 --firmware fw.bin -o report.html --format html
+```
+
+The agent scan outputs:
+- **Phase 1**: Discovery findings (network services, default credentials)
+- **Phase 2**: AI-recommended next modules with reasoning
+- **Phase 3**: Deep scan results from targeted modules
+- **Phase 4**: Executive summary, risk rating, attack chain analysis, OWASP compliance gaps, prioritized remediations with effort estimates
+
+### 14. AI analysis of existing reports
+
+Re-analyze a previously saved JSON report with AI:
+
+```bash
+# Analyze full report
+iotscan analyze report.json
+
+# Deep dive into a specific finding (by number)
+iotscan analyze report.json --finding 3
+
+# Use Claude for deep analysis
+ANTHROPIC_API_KEY=sk-... iotscan analyze report.json --ai-provider anthropic
+```
+
+### 15. Network discovery scan
+
+Discover services, UPnP devices, mDNS, and test SNMP community strings:
+
+```bash
+iotscan scan 192.168.1.100 -m network
+```
+
+### 16. Web interface security testing
+
+Test the device web admin panel for injection, traversal, headers, and TLS:
+
+```bash
+iotscan scan 192.168.1.100 -p 8080 -m web
+```
+
 ## Configuration File
 
 Generate a sample config to get started:
@@ -384,6 +482,8 @@ iotscan scan 192.168.1.100 -c my_scan.yaml -o report.html --format html
 - Hardcoded passwords, API keys, tokens, private keys, DB connection strings, AWS credentials
 - Unsafe C functions: `strcpy`, `sprintf`, `gets`, `scanf`, etc.
 - Outdated BusyBox, OpenSSL, Dropbear, lighttpd, dnsmasq versions
+- ELF binary hardening: NX (executable stack), PIE, RELRO, stack canaries
+- Weak cryptography: DES, RC4, MD5, SHA-1, ECB mode, weak PRNG
 - High-entropy sections (encrypted/compressed regions)
 - Debug artifacts: build paths, telnetd, JTAG/UART references, GDB stubs
 
@@ -420,10 +520,36 @@ iotscan scan 192.168.1.100 -c my_scan.yaml -o report.html --format html
 - Network segmentation (VLAN, egress filtering, IDS)
 - Cloud backend: encryption at rest, per-device identity, shared credentials
 
+### Network Discovery (`-m network`)
+- Port scanning across 20 common IoT ports (HTTP, SSH, Telnet, MQTT, CoAP, Modbus, BACnet, RTSP, etc.)
+- Service banner grabbing and version fingerprinting
+- UPnP/SSDP device discovery and IGD port mapping detection
+- mDNS service enumeration
+- SNMP default community string testing (public, private, community, etc.)
+- Dangerous service exposure alerts (Modbus, BACnet, Telnet, RTSP, raw printing)
+
+### Web Security (`-m web`)
+- Missing security headers (X-Frame-Options, CSP, HSTS, X-Content-Type-Options)
+- Sensitive endpoint discovery: /.env, /debug, /config.json, /admin, /backup, HNAP, GoAhead forms
+- Path traversal testing (../etc/passwd variants)
+- Command injection detection via diagnostic endpoints (ping, diag, goform)
+- CORS misconfiguration (wildcard, origin reflection)
+- Dangerous HTTP methods (PUT, DELETE, TRACE)
+- TLS certificate and cipher validation
+- Information disclosure headers (X-Powered-By, Server version)
+
+### AI Agent (`agent-scan`)
+- Multi-phase adaptive scanning (discovery → AI analysis → deep scan → report)
+- Attack chain identification (credential chains, firmware supply chain, telnet-to-rootkit)
+- OWASP IoT Top 10 compliance mapping with CVSS scores
+- Executive summary generation for non-technical stakeholders
+- Prioritized remediations with effort estimates
+- Supports Anthropic Claude, OpenAI, and offline rule-based analysis
+
 ## Running Tests
 
 ```bash
-pytest              # run all 36 tests
+pytest              # run all 59 tests
 pytest -v           # verbose output
 pytest --cov        # with coverage report
 ```

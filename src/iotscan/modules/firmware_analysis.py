@@ -107,8 +107,10 @@ class FirmwareAnalyzer(BaseScanner):
         self._scan_for_secrets(data)
         self._check_unsafe_functions(data)
         self._detect_vulnerable_libraries(data)
+        self._check_elf_hardening(data)
         self._check_entropy_sections(data)
         self._check_debug_artifacts(data)
+        self._check_crypto_issues(data)
 
     def _identify_headers(self, data: bytes) -> None:
         """Identify embedded filesystem and binary headers in firmware."""
@@ -154,6 +156,8 @@ class FirmwareAnalyzer(BaseScanner):
                     description=f"Detected {len(matches)} instance(s) of {label} embedded in firmware binary.",
                     evidence=f"Sample matches (redacted): {sanitized}",
                     remediation="Remove hardcoded credentials. Use secure key storage (TPM/HSM) or provisioning mechanisms.",
+                    owasp_iot="I1",
+                    cvss_score=9.1 if "private key" in label.lower() else 7.5,
                 )
 
     def _check_unsafe_functions(self, data: bytes) -> None:
@@ -192,6 +196,8 @@ class FirmwareAnalyzer(BaseScanner):
                     evidence=f"Detected version string: {match.group(0).decode('utf-8', errors='ignore')}",
                     remediation=f"Update {lib_name} to version {info['min_safe']} or later.",
                     cve=info["cve_prefix"],
+                    owasp_iot="I5",
+                    cvss_score=7.5,
                 )
 
     def _check_entropy_sections(self, data: bytes) -> None:
@@ -249,4 +255,153 @@ class FirmwareAnalyzer(BaseScanner):
                     severity=Severity.MEDIUM if "telnet" in label.lower() else Severity.LOW,
                     description=f"Found {label} in firmware, which may expose sensitive debugging information or attack surface.",
                     remediation="Remove debug artifacts and disable unnecessary services in production firmware.",
+                )
+
+    def _check_elf_hardening(self, data: bytes) -> None:
+        """Check ELF binaries for security hardening flags (NX, PIE, RELRO, stack canaries)."""
+        # Find all ELF headers in the firmware
+        elf_magic = b"\x7fELF"
+        offset = 0
+        elf_count = 0
+        missing_hardening: dict[str, int] = {}
+
+        while offset < len(data) - 64:
+            pos = data.find(elf_magic, offset)
+            if pos == -1:
+                break
+
+            elf_count += 1
+            elf_data = data[pos:]
+
+            if len(elf_data) < 64:
+                offset = pos + 4
+                continue
+
+            # Parse ELF header basics
+            ei_class = elf_data[4]  # 1=32-bit, 2=64-bit
+            ei_data = elf_data[5]   # 1=little-endian, 2=big-endian
+            endian = "<" if ei_data == 1 else ">"
+
+            if ei_class == 1:  # 32-bit
+                e_type = struct.unpack_from(f"{endian}H", elf_data, 16)[0]
+                e_phoff = struct.unpack_from(f"{endian}I", elf_data, 28)[0]
+                e_phentsize = struct.unpack_from(f"{endian}H", elf_data, 42)[0]
+                e_phnum = struct.unpack_from(f"{endian}H", elf_data, 44)[0]
+                ph_fmt = f"{endian}IIIIIIII"
+                ph_size = 32
+            elif ei_class == 2:  # 64-bit
+                e_type = struct.unpack_from(f"{endian}H", elf_data, 16)[0]
+                e_phoff = struct.unpack_from(f"{endian}Q", elf_data, 32)[0]
+                e_phentsize = struct.unpack_from(f"{endian}H", elf_data, 54)[0]
+                e_phnum = struct.unpack_from(f"{endian}H", elf_data, 56)[0]
+                ph_fmt = f"{endian}IIQQQQQQ"
+                ph_size = 56
+            else:
+                offset = pos + 4
+                continue
+
+            # Check if it's an executable or shared object
+            if e_type not in (2, 3):  # ET_EXEC=2, ET_DYN=3
+                offset = pos + 4
+                continue
+
+            # PIE check: executables should be ET_DYN (position-independent)
+            if e_type == 2:
+                missing_hardening["No PIE (position-independent executable)"] = (
+                    missing_hardening.get("No PIE (position-independent executable)", 0) + 1
+                )
+
+            # Parse program headers to check NX and RELRO
+            has_gnu_stack = False
+            stack_executable = False
+            has_gnu_relro = False
+
+            if e_phoff > 0 and e_phnum < 100 and e_phoff + e_phnum * e_phentsize <= len(elf_data):
+                for i in range(e_phnum):
+                    ph_offset = e_phoff + i * e_phentsize
+                    if ph_offset + ph_size > len(elf_data):
+                        break
+
+                    try:
+                        ph = struct.unpack_from(ph_fmt, elf_data, ph_offset)
+                    except struct.error:
+                        break
+
+                    p_type = ph[0]
+
+                    # PT_GNU_STACK = 0x6474e551
+                    if p_type == 0x6474E551:
+                        has_gnu_stack = True
+                        if ei_class == 1:
+                            p_flags = ph[6]
+                        else:
+                            p_flags = ph[1]
+                        # PF_X = 0x1
+                        if p_flags & 0x1:
+                            stack_executable = True
+
+                    # PT_GNU_RELRO = 0x6474e552
+                    if p_type == 0x6474E552:
+                        has_gnu_relro = True
+
+            if not has_gnu_stack or stack_executable:
+                missing_hardening["No NX (executable stack)"] = (
+                    missing_hardening.get("No NX (executable stack)", 0) + 1
+                )
+
+            if not has_gnu_relro:
+                missing_hardening["No RELRO (relocation read-only)"] = (
+                    missing_hardening.get("No RELRO (relocation read-only)", 0) + 1
+                )
+
+            # Check for stack canary symbols
+            elf_text = elf_data[:min(len(elf_data), 65536)].decode("latin-1", errors="ignore")
+            if "__stack_chk_fail" not in elf_text and "__stack_chk_guard" not in elf_text:
+                missing_hardening["No stack canaries"] = (
+                    missing_hardening.get("No stack canaries", 0) + 1
+                )
+
+            offset = pos + 4
+
+        if elf_count == 0:
+            return
+
+        self.result.raw_data["elf_binaries_found"] = elf_count
+
+        if missing_hardening:
+            details = "; ".join(f"{issue}: {count} binary(ies)" for issue, count in missing_hardening.items())
+            self.add_finding(
+                title="ELF binaries missing security hardening",
+                severity=Severity.HIGH,
+                description=(
+                    f"Analyzed {elf_count} ELF binary(ies). Missing hardening: {details}. "
+                    "These omissions make exploitation of memory corruption vulnerabilities significantly easier."
+                ),
+                evidence=f"Hardening gaps: {missing_hardening}",
+                remediation=(
+                    "Compile with: -fstack-protector-strong (canaries), -Wl,-z,relro,-z,now (full RELRO), "
+                    "-Wl,-z,noexecstack (NX), -fPIE -pie (PIE). Enable ASLR on the target OS."
+                ),
+            )
+
+    def _check_crypto_issues(self, data: bytes) -> None:
+        """Check for weak cryptographic implementations in firmware."""
+        text = data.decode("latin-1", errors="ignore")
+
+        crypto_issues = [
+            (r"DES_ecb_encrypt|DES_set_key", "DES encryption (broken, 56-bit key)", Severity.HIGH),
+            (r"MD5_Init|MD5_Update|MD5_Final|md5sum", "MD5 hash usage (collision-vulnerable)", Severity.MEDIUM),
+            (r"SHA1_Init|SHA1_Update|sha1sum", "SHA-1 hash usage (collision-vulnerable)", Severity.MEDIUM),
+            (r"RC4|arc4random_buf", "RC4 stream cipher (biased output)", Severity.HIGH),
+            (r"rand\(\)|srand\(", "Weak PRNG (rand/srand instead of secure random)", Severity.HIGH),
+            (r"ECB_MODE|ecb_encrypt|_ECB", "ECB block cipher mode (no diffusion)", Severity.HIGH),
+        ]
+
+        for pattern, label, severity in crypto_issues:
+            if re.search(pattern, text):
+                self.add_finding(
+                    title=f"Weak cryptography: {label}",
+                    severity=severity,
+                    description=f"Found {label} in firmware. This cryptographic primitive is considered insecure.",
+                    remediation="Use AES-256-GCM for encryption, SHA-256/SHA-3 for hashing, and OS-provided CSPRNG for random numbers.",
                 )

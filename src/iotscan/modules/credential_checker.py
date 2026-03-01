@@ -188,6 +188,8 @@ class CredentialChecker(BaseScanner):
                 ),
                 evidence=f"Successful logins: {successful}",
                 remediation="Change default credentials immediately. Enforce strong password policy. Implement account lockout.",
+                owasp_iot="I1",
+                cvss_score=9.8,
             )
 
     def _check_ssh_banner(self, host: str, port: int) -> None:
@@ -243,6 +245,8 @@ class CredentialChecker(BaseScanner):
                 ),
                 evidence=f"Telnet banner: {banner[:100]}",
                 remediation="Disable telnet entirely. Use SSH for remote management.",
+                owasp_iot="I2",
+                cvss_score=8.1,
             )
         except OSError:
             pass

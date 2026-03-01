@@ -64,6 +64,11 @@ def generate_text_report(summary: dict) -> str:
                 lines.append(f"       Evidence: {finding['evidence']}")
             if finding.get("cve"):
                 lines.append(f"       CVE: {finding['cve']}")
+            if finding.get("owasp_iot"):
+                owasp_title = finding.get("owasp_iot_title", "")
+                lines.append(f"       OWASP IoT: {finding['owasp_iot']} - {owasp_title}")
+            if finding.get("cvss_score"):
+                lines.append(f"       CVSS: {finding['cvss_score']}/10.0")
             if finding.get("remediation"):
                 lines.append(f"       Fix: {finding['remediation']}")
 
@@ -112,6 +117,8 @@ def generate_html_report(summary: dict) -> str:
                 <p>{_escape(finding.get('description', ''))}</p>
                 {"<p><em>Evidence:</em> " + _escape(finding.get('evidence', '')) + "</p>" if finding.get('evidence') else ""}
                 {"<p><em>CVE:</em> " + _escape(finding.get('cve', '')) + "</p>" if finding.get('cve') else ""}
+                {"<p><em>OWASP IoT:</em> " + _escape(finding.get('owasp_iot', '') + ' - ' + finding.get('owasp_iot_title', '')) + "</p>" if finding.get('owasp_iot') else ""}
+                {"<p><em>CVSS:</em> " + str(finding.get('cvss_score', '')) + "/10.0</p>" if finding.get('cvss_score') else ""}
                 {"<p><strong>Remediation:</strong> " + _escape(finding.get('remediation', '')) + "</p>" if finding.get('remediation') else ""}
             </div>
             """

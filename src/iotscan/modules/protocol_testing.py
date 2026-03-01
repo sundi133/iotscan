@@ -70,6 +70,8 @@ class ProtocolTester(BaseScanner):
                         ),
                         evidence=f"CONNACK return code: 0x00 (Connection Accepted) on {host}:{port}",
                         remediation="Enable authentication on the MQTT broker. Use username/password or client certificates.",
+                        owasp_iot="I9",
+                        cvss_score=9.1,
                     )
                 elif return_code == 0x05:
                     self.add_finding(
