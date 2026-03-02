@@ -358,7 +358,10 @@ iotscan agent-scan 192.168.1.100 --device-type smart_camera
 iotscan agent-scan 192.168.1.100 --firmware ./fw.bin --device-type ip_camera
 
 # With Claude AI (requires ANTHROPIC_API_KEY)
-ANTHROPIC_API_KEY=sk-... iotscan agent-scan 192.168.1.100 --ai-provider anthropic
+ANTHROPIC_API_KEY=sk-ant-... iotscan agent-scan 192.168.1.100 --ai-provider anthropic
+
+# With a specific Claude model
+iotscan agent-scan 192.168.1.100 --ai-provider anthropic --ai-model claude-sonnet-4-20250514
 
 # With OpenAI (requires OPENAI_API_KEY)
 OPENAI_API_KEY=sk-... iotscan agent-scan 192.168.1.100 --ai-provider openai
@@ -385,7 +388,10 @@ iotscan analyze report.json
 iotscan analyze report.json --finding 3
 
 # Use Claude for deep analysis
-ANTHROPIC_API_KEY=sk-... iotscan analyze report.json --ai-provider anthropic
+ANTHROPIC_API_KEY=sk-ant-... iotscan analyze report.json --ai-provider anthropic
+
+# Use a specific model for analysis
+iotscan analyze report.json --ai-provider anthropic --ai-model claude-sonnet-4-20250514
 ```
 
 ### 15. Network discovery scan
@@ -474,6 +480,97 @@ Edit the values for your target environment, then:
 ```bash
 iotscan scan 192.168.1.100 -c my_scan.yaml -o report.html --format html
 ```
+
+## AI Configuration
+
+The `agent-scan` and `analyze` commands support LLM-powered analysis via Anthropic Claude or OpenAI. Without an API key, scans fall back to an offline rule-based engine that still produces executive summaries, attack chains, and OWASP mapping.
+
+### Setting up Anthropic Claude
+
+1. Get an API key from [console.anthropic.com](https://console.anthropic.com/)
+2. Install the SDK:
+   ```bash
+   pip install anthropic
+   ```
+3. Export your key:
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-api03-...
+   ```
+4. Run a scan:
+   ```bash
+   iotscan agent-scan 192.168.1.100 --ai-provider anthropic --device-type smart_camera
+   ```
+
+### Setting up OpenAI
+
+1. Get an API key from [platform.openai.com](https://platform.openai.com/)
+2. Install the SDK:
+   ```bash
+   pip install openai
+   ```
+3. Export your key:
+   ```bash
+   export OPENAI_API_KEY=sk-...
+   ```
+4. Run a scan:
+   ```bash
+   iotscan agent-scan 192.168.1.100 --ai-provider openai --device-type smart_camera
+   ```
+
+### AI Provider Options
+
+| Flag | Values | Default |
+|------|--------|---------|
+| `--ai-provider` | `anthropic`, `openai`, `offline` | `offline` |
+| `--ai-model` | Any model ID string | Provider default (see below) |
+
+### Supported Models
+
+| Provider | Default Model | Other Options |
+|----------|---------------|---------------|
+| **Anthropic** | `claude-sonnet-4-20250514` | `claude-opus-4-20250514`, `claude-haiku-4-5-20251001` |
+| **OpenAI** | `gpt-4o` | `gpt-4-turbo`, `gpt-4o-mini` |
+| **Offline** | Rule-based engine | N/A (no API call) |
+
+Override the model with `--ai-model`:
+
+```bash
+# Use Claude Opus for deeper analysis
+iotscan agent-scan 192.168.1.100 --ai-provider anthropic --ai-model claude-opus-4-20250514
+
+# Use Haiku for faster, cheaper scans
+iotscan agent-scan 192.168.1.100 --ai-provider anthropic --ai-model claude-haiku-4-5-20251001
+
+# Use GPT-4o Mini for lower cost
+iotscan agent-scan 192.168.1.100 --ai-provider openai --ai-model gpt-4o-mini
+```
+
+### Using AI with Docker
+
+Pass your API key as an environment variable:
+
+```bash
+# Agent scan with Claude
+docker compose run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  iotscan agent-scan iot-device --device-type smart_camera \
+  --ai-provider anthropic -o /app/reports/ai_report.html --format html
+
+# Analyze an existing report with Claude
+docker compose run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  iotscan analyze /app/reports/device_scan.json --ai-provider anthropic
+
+# Deep dive into a specific finding
+docker compose run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  iotscan analyze /app/reports/device_scan.json --ai-provider anthropic --finding 3
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models |
+| `OPENAI_API_KEY` | OpenAI API key for GPT models |
+| `IOTSCAN_AI_PROVIDER` | Default AI provider (`anthropic`, `openai`, `offline`). Overridden by `--ai-provider` flag. |
 
 ## What Each Module Detects
 
